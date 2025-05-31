@@ -17,13 +17,24 @@ def receive_data():
 def get_telemetry():
     """Fetch telemetry data for frontend"""
     try:
-        # Generate test telemetry data
-        test_data = generate_test_telemetry()
-        return jsonify({
-            "status": "success",
-            "data": test_data,
-            "timestamp": datetime.utcnow().isoformat()
-        })
+        # Try to get real data from database first
+        real_data = data_controller.get_latest_telemetry()
+        
+        if real_data:
+            return jsonify({
+                "status": "success",
+                "data": real_data,
+                "source": "database"
+            })
+        else:
+            # Fallback to test data if no real data available
+            test_data = generate_test_telemetry()
+            return jsonify({
+                "status": "success",
+                "data": test_data,
+                "source": "test_data",
+                "timestamp": datetime.utcnow().isoformat()
+            })
     except Exception as e:
         return jsonify({
             "status": "error",
