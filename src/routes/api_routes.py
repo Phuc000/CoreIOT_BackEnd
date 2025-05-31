@@ -1,10 +1,12 @@
 from flask import Blueprint, request, jsonify
 from controllers.data_controller import DataController
+from controllers.led_controller import LEDController
 import random
 from datetime import datetime, timedelta
 
 api_routes = Blueprint('api_routes', __name__)
 data_controller = DataController()
+led_controller = LEDController()
 
 @api_routes.route('/data', methods=['POST'])
 def receive_data():
@@ -65,6 +67,59 @@ def get_telemetry_history():
         return jsonify({
             "status": "error",
             "message": f"Failed to fetch historical data: {str(e)}"
+        }), 500
+
+# LED Control Endpoints
+@api_routes.route('/led', methods=['POST'])
+def control_led():
+    """Control LED state"""
+    try:
+        json_data = request.get_json()
+        
+        if not json_data:
+            return jsonify({
+                "status": "error",
+                "message": "JSON data required"
+            }), 400
+        
+        state = json_data.get('state')
+        if state is None:
+            return jsonify({
+                "status": "error",
+                "message": "Missing 'state' parameter"
+            }), 400
+        
+        response = led_controller.set_led_state(state)
+        return jsonify(response)
+        
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": f"LED control error: {str(e)}"
+        }), 500
+
+@api_routes.route('/led', methods=['GET'])
+def get_led_status():
+    """Get current LED status"""
+    try:
+        response = led_controller.get_led_state()
+        return jsonify(response)
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": f"Failed to get LED status: {str(e)}"
+        }), 500
+
+@api_routes.route('/led/toggle', methods=['POST'])
+def toggle_led():
+    """Toggle LED state"""
+    try:
+        response = led_controller.toggle_led()
+        return jsonify(response)
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": f"LED toggle error: {str(e)}"
         }), 500
 
 def generate_test_telemetry():
