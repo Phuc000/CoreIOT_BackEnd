@@ -12,14 +12,13 @@ led_controller = LEDController()
 def receive_data():
     json_data = request.get_json()
     response = data_controller.receive_data(json_data)
-    print(f"Received data: {json_data}")  # Debugging output
+    print(f"Received data: {json_data}")
     return jsonify(response)
 
 @api_routes.route('/telemetry', methods=['GET'])
 def get_telemetry():
     """Fetch telemetry data for frontend"""
     try:
-        # Try to get real data from database first
         real_data = data_controller.get_latest_telemetry()
         
         if real_data:
@@ -29,7 +28,6 @@ def get_telemetry():
                 "source": "database"
             })
         else:
-            # Fallback to test data if no real data available
             test_data = generate_test_telemetry()
             return jsonify({
                 "status": "success",
@@ -72,24 +70,18 @@ def get_telemetry_history():
 # LED Control Endpoints
 @api_routes.route('/led', methods=['POST'])
 def control_led():
-    """Control LED state"""
+    """Control LED (connects to CoreIOT on-demand)"""
     try:
         json_data = request.get_json()
         
-        if not json_data:
-            return jsonify({
-                "status": "error",
-                "message": "JSON data required"
-            }), 400
-        
-        state = json_data.get('state')
-        if state is None:
+        if not json_data or 'state' not in json_data:
             return jsonify({
                 "status": "error",
                 "message": "Missing 'state' parameter"
             }), 400
         
-        response = led_controller.set_led_state(state)
+        # This will connect to CoreIOT, send command, and disconnect
+        response = led_controller.set_led_state(json_data['state'])
         return jsonify(response)
         
     except Exception as e:
@@ -98,9 +90,9 @@ def control_led():
             "message": f"LED control error: {str(e)}"
         }), 500
 
-@api_routes.route('/led', methods=['GET'])
+@api_routes.route('/led/status', methods=['GET'])
 def get_led_status():
-    """Get current LED status"""
+    """Get last known LED status"""
     try:
         response = led_controller.get_led_state()
         return jsonify(response)
