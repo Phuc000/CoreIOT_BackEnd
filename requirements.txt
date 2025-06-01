@@ -1,4 +1,10 @@
-Flask==2.1.2
-Flask-RESTful==0.3.9
-pydantic==1.9.0
-pytest==7.1.2
+flask
+flask-cors
+flask-socketio
+pymongo
+python-dotenv
+paho-mqtt
+langchain-google-genai
+langgraph
+langchain-core
+requests
