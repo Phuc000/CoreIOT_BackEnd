@@ -1,21 +1,22 @@
-from flask import Flask
+from flask import Flask, request
 from flask_cors import CORS
-from flask_socketio import SocketIO, emit
 from routes.api_routes import setup_routes
 import json
+import asyncio
+import websockets
+import threading
+from werkzeug.serving import make_server
 
 app = Flask(__name__)
 
 # Enable CORS for all routes and origins
 CORS(app, origins=["http://localhost:5173"])
 
-# Initialize SocketIO with CORS support
-socketio = SocketIO(app, cors_allowed_origins="*")
-
 # Simple chatbot session (single session only)
 class SimpleChatbot:
     def __init__(self):
         self.conversation_history = []
+        self.connected_clients = set()
     
     def process_message(self, message):
         """Simple chatbot response - replace with your RAG implementation"""
@@ -43,61 +44,78 @@ class SimpleChatbot:
 # Single chatbot instance
 chatbot = SimpleChatbot()
 
-# WebSocket events
-@socketio.on('connect')
-def handle_connect():
+# WebSocket handler - REMOVED the 'path' parameter
+async def handle_websocket(websocket):
+    """Handle WebSocket connections"""
     print('🔌 Client connected to chatbot')
-    emit('message', {
+    chatbot.connected_clients.add(websocket)
+    
+    # Send welcome message
+    welcome_message = {
+        'type': 'message',
         'message': 'Welcome! I\'m your IoT assistant. How can I help you today?',
         'error': None
-    })
-
-@socketio.on('disconnect')
-def handle_disconnect():
-    print('🔌 Client disconnected from chatbot')
-
-@socketio.on('chat_message')
-def handle_chat_message(data):
+    }
+    await websocket.send(json.dumps(welcome_message))
+    
     try:
-        user_message = data.get('message', '')
-        print(f'📥 Received message: {user_message}')
-        
-        if not user_message:
-            emit('message', {
-                'message': '',
-                'error': 'Message cannot be empty'
-            })
-            return
-        
-        # Process message with chatbot
-        bot_response = chatbot.process_message(user_message)
-        
-        # Send response back
-        emit('message', {
-            'message': bot_response,
-            'error': None
-        })
-        
-    except Exception as e:
-        print(f'❌ Chatbot error: {e}')
-        emit('message', {
-            'message': '',
-            'error': str(e)
-        })
-
-@socketio.on('get_history')
-def handle_get_history():
-    try:
-        history = chatbot.get_history()
-        emit('history', {
-            'history': history,
-            'error': None
-        })
-    except Exception as e:
-        emit('history', {
-            'history': [],
-            'error': str(e)
-        })
+        async for message in websocket:
+            try:
+                data = json.loads(message)
+                message_type = data.get('type', '')
+                
+                if message_type == 'chat_message':
+                    user_message = data.get('message', '')
+                    print(f'📥 Received message: {user_message}')
+                    
+                    if not user_message:
+                        response = {
+                            'type': 'message',
+                            'message': '',
+                            'error': 'Message cannot be empty'
+                        }
+                    else:
+                        # Process message with chatbot
+                        bot_response = chatbot.process_message(user_message)
+                        
+                        response = {
+                            'type': 'message',
+                            'message': bot_response,
+                            'error': None
+                        }
+                    
+                    await websocket.send(json.dumps(response))
+                
+                elif message_type == 'get_history':
+                    history = chatbot.get_history()
+                    response = {
+                        'type': 'history',
+                        'history': history,
+                        'error': None
+                    }
+                    await websocket.send(json.dumps(response))
+                
+            except json.JSONDecodeError:
+                error_response = {
+                    'type': 'error',
+                    'message': 'Invalid JSON format',
+                    'error': 'JSON decode error'
+                }
+                await websocket.send(json.dumps(error_response))
+            
+            except Exception as e:
+                print(f'❌ Chatbot error: {e}')
+                error_response = {
+                    'type': 'error',
+                    'message': '',
+                    'error': str(e)
+                }
+                await websocket.send(json.dumps(error_response))
+    
+    except websockets.exceptions.ConnectionClosed:
+        print('🔌 Client disconnected from chatbot')
+    finally:
+        chatbot.connected_clients.discard(websocket)
 
 # Setup API routes
 setup_routes(app)
@@ -108,14 +126,37 @@ def chatbot_status():
     return {
         "status": "active",
         "conversation_length": len(chatbot.conversation_history),
+        "connected_clients": len(chatbot.connected_clients),
         "last_message": chatbot.conversation_history[-1] if chatbot.conversation_history else None
     }
+
+async def start_websocket_server():
+    """Start WebSocket server"""
+    print("💬 Chatbot WebSocket: ws://localhost:5001")
+    server = await websockets.serve(handle_websocket, "localhost", 5001)
+    await server.wait_closed()
+
+def run_websocket_server():
+    """Run WebSocket server in a separate thread"""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    try:
+        loop.run_until_complete(start_websocket_server())
+    except KeyboardInterrupt:
+        print("💬 WebSocket server stopped")
+    finally:
+        loop.close()
 
 if __name__ == "__main__":
     print("🚀 Starting IoT API Gateway with Chatbot...")
     print("📡 API Gateway: http://localhost:5000")
-    print("💬 Chatbot WebSocket: ws://localhost:5000/socket.io/")
+    
+    # Start WebSocket server in a separate thread
+    websocket_thread = threading.Thread(target=run_websocket_server, daemon=True)
+    websocket_thread.start()
+    
     print("📊 API Documentation available at endpoints")
     
-    # Run with SocketIO
-    socketio.run(app, debug=True, host='0.0.0.0', port=5000)
+    # Run Flask app
+    app.run(debug=True, host='0.0.0.0', port=5000, use_reloader=False)
