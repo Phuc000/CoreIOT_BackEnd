@@ -242,7 +242,7 @@ def create_smart_room_agent():
     agent = create_react_agent(
         model=llm,
         tools=tools,
-        state_modifier="""
+        prompt="""
         You are a Smart Room Assistant, an AI helper for monitoring and managing an IoT-enabled room environment.
         Your primary role is to help users understand their room's environmental conditions and provide actionable recommendations.
         
@@ -267,7 +267,6 @@ def create_smart_room_agent():
         
         RESPONSE STYLE:
         - Be friendly, helpful, and conversational
-        - Use emojis appropriately (🌡️ for temperature, 💧 for humidity, 💡 for light)
         - Provide specific numbers and recommendations
         - Explain the "why" behind your recommendations
         - Be concise but informative
