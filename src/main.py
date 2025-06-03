@@ -31,11 +31,12 @@ async def handle_websocket(websocket):
     
     try:
         async for message in websocket:
+            print(f'📥 Received message: {message}')
             try:
                 data = json.loads(message)
                 message_type = data.get('type', '')
                 
-                if message_type == 'chat_message':
+                if True:
                     user_message = data.get('message', '')
                     print(f'📥 Received message: {user_message}')
                     
